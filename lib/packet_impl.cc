@@ -1526,6 +1526,15 @@ namespace gr {
       return -1;
     }
 
+    uint8_t le_packet::air_to_host8_flip(char * rx_order, int bits)
+    {
+      int i;
+      uint8_t host_order = 0;
+      for (i = 0; i < bits; i++)
+        host_order |= (rx_order[i] << (7-i));
+      return host_order;      
+    }
+
     le_packet_impl::le_packet_impl(char *stream, int length, double freq)
       : packet(stream, length, freq)
     {
@@ -1544,6 +1553,7 @@ namespace gr {
       d_payload_length = 0;
 
       uint16_t header = air_to_host16(&d_link_symbols[40], 16);
+
       if (d_index >= 37) {
         d_PDU_Type   = (header >> 0) & 0xf;
         d_TxAdd      = (header >> 6) & 1;
@@ -1557,11 +1567,27 @@ namespace gr {
         d_MD         = (header >> 4) & 1;
         d_PDU_Length = (header >> 8) & 0x1f;
       }
-
+      d_pdu_full[0] = air_to_host8(&d_link_symbols[40], 8);
+      d_pdu_full[1] = air_to_host8(&d_link_symbols[48], 8);
+      //printf("d_pdu_full:%02x, %02x \n",d_pdu_full[0],d_pdu_full[1]); 
       unsigned pi;
-      for( pi=0, i=56; i+8<LE_MAX_SYMBOLS; pi++, i+=8 ) {
+      for( pi=0, i=56; i+8 < LE_MAX_SYMBOLS; pi++, i+=8 ) {
         d_pdu[pi] = air_to_host8(&d_link_symbols[i], 8);
+        d_pdu_full[pi+2] = air_to_host8(&d_link_symbols[i], 8);
+      }    
+      d_crc = 0;
+      for (pi=0;pi<3;pi++) 
+      {
+        d_crc=(d_crc<<8)|d_pdu_full[d_PDU_Length+2+pi];
       }
+      printf("d_pdu_full:");
+      for (pi=0; pi < d_PDU_Length+2+3; ++pi)
+	      printf("%02x ",d_pdu_full[pi]);
+      printf("\n");
+      printf("d_pdu:");
+      for (pi=0; pi < d_PDU_Length+2+3; ++pi)
+	      printf("%02x ",d_pdu[pi]);
+      printf("\n");
     }
 
     le_packet_impl::~le_packet_impl( )
@@ -1577,7 +1603,60 @@ namespace gr {
     {
       // FIXME: TODO
     }
-           
+
+    uint32_t le_packet_impl::le_crc_calc()
+    {
+      uint8_t* buf = d_pdu_full;
+      
+      uint8_t dst[3];
+      // initialize 24-bit shift register in "wire bit order"
+      // dst[0] = bits 23-16, dst[1] = bits 15-8, dst[2] = bits 7-0
+      dst[0] = 0xaa;
+      dst[1] = 0xaa;
+      dst[2] = 0xaa;
+
+      unsigned len = d_PDU_Length+2;
+      while (len--) {
+
+        uint8_t d = *(buf++);
+
+        for (uint8_t i = 1; i; i <<= 1, d >>= 1) {
+
+          // save bit 23 (highest-value), left-shift the entire register by one
+          uint8_t t = dst[0] & 0x01;         dst[0] >>= 1;
+          if (dst[1] & 0x01) dst[0] |= 0x80; dst[1] >>= 1;
+          if (dst[2] & 0x01) dst[1] |= 0x80; dst[2] >>= 1;
+
+          // if the bit just shifted out (former bit 23) and the incoming data
+          // bit are not equal (i.e. bit_out ^ bit_in == 1) => toggle tap bits
+          if (t != (d & 1)) {
+            // toggle register tap bits (=XOR with 1) according to CRC polynom
+            dst[2] ^= 0xDA; // 0b11011010 inv. = 0b01011011 ^= x^6+x^4+x^3+x+1
+            dst[1] ^= 0x60; // 0b01100000 inv. = 0b00000110 ^= x^10+x^9
+          }
+        }
+      }
+      unsigned pi;
+      uint32_t calc_crc = 0;
+      for (pi=0;pi<3;pi++) 
+      {
+        calc_crc=(calc_crc<<8)|dst[pi];
+      }
+      return calc_crc;
+    }
+    
+    /* check if calculated and packet CRC match - Nishant */
+    bool le_packet_impl::le_crc_check()
+    {
+      if (d_crc == le_crc_calc())
+      {
+        return true;
+      }
+      else{
+        return false;
+      }
+    }
+
     void le_packet_impl::print()
     {
       unsigned i;
@@ -1592,6 +1671,15 @@ namespace gr {
         case 6:
           printf( "  AdvA=%02x%02x%02x%02x%02x%02x\n", 
                   d_pdu[0], d_pdu[1], d_pdu[2], d_pdu[3], d_pdu[4], d_pdu[5] );
+          printf("CRC Check : ");
+          //printf("d_crc=%06x, le_crc_calc=%06x",d_crc,le_crc_calc());
+          if(le_crc_check())
+          {
+            printf("Pass\n");
+          }
+          else{
+            printf("Fail\n");
+          }
           if (d_PDU_Type == 4) {
             printf( "\n  (char) ScanRspData=" );
           }
@@ -1668,11 +1756,82 @@ namespace gr {
     {
       return (char*)calloc(256,1); // FIXME: TODO
     }
-      
+    
+    /* Get channel index - Nishant */
+    bool le_packet_impl::get_index()
+    {
+	   if (d_index >= 37)
+		  return true;
+	   else
+		  return false;
+    }
+
+    /* Get BD Addr string - Nishant */
+    char *le_packet_impl::get_bd_string(void)
+    {
+	    char* bd_buffer = new char[20];
+	    sprintf(bd_buffer,"%02x%02x%02x%02x%02x%02x",d_pdu[5],d_pdu[4],d_pdu[3],d_pdu[2],d_pdu[1],d_pdu[0]);
+	    return bd_buffer;
+    }
+
+    float *le_packet_impl::get_bd_ints(void)
+    {
+	   float* bd_buffer = new float[12];
+	   for(int b = 0; b<11; b+=2)
+	   {
+		  bd_buffer[b] = (float)d_pdu[5-(b/2)];
+		  bd_buffer[b+1] = 0.0; 
+	   }
+	   return bd_buffer;
+    }
+
+
     bool le_packet_impl::header_present()
     {
       return false; // FIXME: TODO
     }
+
+    /* check if contact tracing beacon - Nishant */
+    bool le_packet_impl::contact_tracing(void)
+    {
+    	char *data_string = new char[d_PDU_Length*2 + 1];
+      unsigned i;
+      //char *y = data_string;
+      unsigned y=0;
+      for (i=6; i<d_PDU_Length; ++i)
+      {
+        sprintf(data_string+y,"%02x",d_pdu[i]);
+        y +=2;
+      }
+      //*y = '\0';
+      int data_len = y+1;
+      //printf("Data_Len=%d\n",data_len);
+      char comp_string[] = "02011a03036ffd17166ffd";
+      int compare_flag = 1;
+      if (data_len >= 23)
+      {
+        for (i=0;i < data_len-23;++i)
+        {	
+          if(strncmp(data_string+i,comp_string,22)==0)
+          {
+            compare_flag = 0;
+            break;
+          }
+        }
+      }
+      
+      delete data_string;
+      if (compare_flag)
+      {
+        return false;
+      }
+      else
+      {
+        return true;
+      }
+
+    }
+
 
   } /* namespace bluetooth */
 } /* namespace gr */

@@ -35,6 +35,8 @@
 #include <stdio.h>
 #include <gnuradio/blocks/complex_to_mag_squared.h>
 
+//#define ZERO_TO_TWOPI
+
 namespace gr {
   namespace bluetooth {
     multi_block::multi_block(double sample_rate, double center_freq, double squelch_threshold)
@@ -102,6 +104,7 @@ namespace gr {
       int channel_history = (int) (d_channel_filter.size( ) + 
                                    d_ddc_decimation_rate * d_interp->ntaps());
       int noise_history   = (int) d_noise_filter.size( );
+      printf("Channel history:%d,Noise history:%d",channel_history,noise_history);
       if (channel_history > noise_history) {
         history_required += channel_history;
         d_first_channel_sample = 0;
@@ -125,6 +128,7 @@ namespace gr {
     }
 
     /* M&M clock recovery, adapted from gr_clock_recovery_mm_ff */
+#if 0
     int 
     multi_block::mm_cr(const float *in, int ninput_items, float *out, int noutput_items)
     {
@@ -135,7 +139,7 @@ namespace gr {
 
       while ((oo < noutput_items) && (ii < ni)) {
         // produce output sample
-		//printf("d_mu %3.3f\n", d_mu);
+	//printf("d_mu %3.3f\n", d_mu);
         out[oo]       = d_interp->interpolate( &in[ii], d_mu );
         mm_val        = slice(d_last_sample) * out[oo] - slice(out[oo]) * d_last_sample;
         d_last_sample = out[oo];
@@ -153,18 +157,89 @@ namespace gr {
       /* return number of output items produced */
       return oo;
     }
-
+#endif
+#if 1
+int multi_block::mm_cr(const float *in, int ninput_items, float *out, int noutput_items)
+{
+	unsigned int ii = 1; /* input index */
+	int          oo = 0; /* output index */
+	//double temp_avg = 0;
+	int temp_count = 0;
+	int flag = 0;
+	int first_item = 1;
+	int first_i = 0;
+	int last_i = 0;
+	int cur_count =0;
+	while ((oo < noutput_items) && (ii < ninput_items)) {
+		if ( ((in[ii] > 0.0) && (in[ii-1] <= 0.0)) || ((in[ii] < 0.0) && (in[ii-1] >= 0.0)) ) {
+			last_i = ii-1;
+			//first_item = 0;
+			flag = 1;
+		}
+		if (flag){
+			flag = 0;
+			//first_i = ii;
+			//printf("Count_new=%d\n",last_i-first_i+1);
+			int ctr = 0;
+			int temp_ctr = 0;
+			double temp_avg=0.0;
+			int num_elmt = last_i-first_i+1;
+			//printf("%d,",num_elmt);
+			//printf("%f,%f\n",in[first_i],in[last_i]);
+			//printf("\n");
+			int sps = (int)d_samples_per_symbol;
+			for(ctr=first_i;ctr<last_i+1;ctr++){
+				if(temp_ctr == sps){
+					out[oo] = temp_avg/sps;
+					oo++;
+					temp_ctr = 0;
+					temp_avg = 0.0;
+				}
+				temp_avg += in[ctr];
+				temp_ctr += 1;
+			}
+			out[oo] = temp_avg;
+			oo++;
+			first_i=ii;
+		}
+		//printf("%f,",in[ii]);
+		ii++;
+		//printf("regular\n");
+	}
+	last_i = ii-1;		
+	int ctr = 0;
+	int temp_ctr = 0;
+	double temp_avg=0.0;
+	int num_elmt = last_i-first_i+1;
+	int sps = (int)d_samples_per_symbol;
+	for(ctr=first_i;ctr<last_i+1;ctr++){
+		if(temp_ctr == sps){
+			out[oo] = temp_avg/sps;
+			oo++;
+			temp_ctr = 0;
+			temp_avg = 0.0;
+		}
+		temp_avg += in[ctr];
+		temp_ctr += 1;
+	}
+	out[oo] = temp_avg/sps;
+	oo++;
+	return oo;
+}
+#endif				
     /* fm demodulation, taken from gr_quadrature_demod_cf */
     void 
     multi_block::demod(const gr_complex *in, float *out, int noutput_items)
     {
       int i;
       gr_complex product;
-
+	//printf("*************************************************************\n");
       for (i = 1; i < noutput_items; i++) {
         gr_complex product = in[i] * conj (in[i-1]);
         out[i] = d_demod_gain * gr::fast_atan2f(imag(product), real(product));
+	//printf("%f;",out[i]);
       }
+	//printf("\n*************************************************************\n");
     }
 
     /* binary slicer, similar to gr_binary_slicer_fb */
@@ -172,10 +247,24 @@ namespace gr {
     multi_block::slicer(const float *in, char *out, int noutput_items)
     {
       int i;
-
-      for (i = 0; i < noutput_items; i++)
-        out[i] = (in[i] < 0) ? 0 : 1;
+	int count=0;
+	int first_count=0;
+	int total_count=0;
+      for (i = 0; i < noutput_items; i++) {
+	      //printf("%f,",in[i]);
+	      if ((in[i] > 0.0) || (in[i] < 0.0)){
+	      count += 1;
+	      if(first_count==0)
+		      first_count=i;
+	      }
+	      out[i] = (in[i] < 0) ? 0 : 1;
+      }
+      //printf("\n");
+      //printf("Count=%d\n",count);
+      //printf("Total_count=%d\n",noutput_items);
+      //printf("First_count=%d\n",first_count);
     }
+
 
     int 
     multi_block::channel_samples( double                     freq,
@@ -188,12 +277,12 @@ namespace gr {
       int classic_chan = abs_freq_channel( freq );
       std::map<int, gr::filter::freq_xlating_fir_filter_ccf::sptr>::const_iterator ddci = 
         d_channel_ddcs.find( classic_chan );
-
+	printf("Ninput_items:%d\n",ninput_items);
       if (ddci != d_channel_ddcs.end( )) {
         gr::filter::freq_xlating_fir_filter_ccf::sptr ddc = ddci->second;
         int ddc_samples = ninput_items - (ddc->history( ) - 1) - d_first_channel_sample;
 		// This changes how many iterations it takes to crash... Definitely on to something.
-		//printf("ddc_samples: %i\n", ddc_samples);
+		//printf("ddc_samples_input: %i\n", ddc_samples);
 		//printf("fcs: %i\n", d_first_channel_sample);
         gr_vector_const_void_star ddc_in( 1 );
         ddc_in[0] = &(((gr_complex *) in[0])[d_first_channel_sample]);
@@ -223,8 +312,9 @@ namespace gr {
       else {
         energy = 1.0;
       }
-
-      return ddc_noutput_items;
+	printf("ddc_noutput_item:%d\n",ddc_noutput_items);
+      //return ddc_noutput_items;
+      return ninput_items; // Modified decoder
     }
 
     int 
@@ -234,6 +324,7 @@ namespace gr {
     {
       /* fm demodulation */
       int demod_noutput_items = ninput_items - 1;
+      //printf("Demod_noutput_items=%d\n",demod_noutput_items);
       float demod_out[demod_noutput_items];
       gr_complex *ch_samps = (gr_complex *) in[0];
       demod( ch_samps, demod_out, demod_noutput_items );
@@ -243,7 +334,7 @@ namespace gr {
       int noutput_items = cr_ninput_items; // poor estimate but probably safe
       float cr_out[noutput_items];
       noutput_items = mm_cr(demod_out, cr_ninput_items, cr_out, noutput_items);
-      
+	//printf("Slicer input:%d\n",noutput_items); 
       /* binary slicer */
       slicer(cr_out, out, noutput_items);
       

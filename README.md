@@ -1,3 +1,5 @@
+Modified version of gr-bluetooth for SparSDR single channel decode. Tested at sampling rates 3e6,4e6. Optimized to reduce memory and processor usage.
+
 GR-Bluetooth
 ============
 Welcome to gr-bluetooth!

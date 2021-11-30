@@ -59,7 +59,7 @@ namespace gr {
       void ac(char *symbols, int len, double freq, double snr);
 
       /* handle AA */
-      void aa(char *symbols, int len, double freq, double snr);
+      void aa(char *symbols, int len, double freq, double snr,unsigned* pdu_length,char **filname,int *flag,float **vals);
 
       /* handle ID packet (no header) */
       void id(uint32_t lap);

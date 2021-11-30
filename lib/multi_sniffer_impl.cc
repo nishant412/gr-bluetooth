@@ -29,6 +29,7 @@
 
 #include <gnuradio/io_signature.h>
 #include "multi_sniffer_impl.h"
+#include <string.h>
 
 namespace gr {
   namespace bluetooth {
@@ -83,26 +84,48 @@ namespace gr {
     multi_sniffer_impl::work( int                        noutput_items,
                               gr_vector_const_void_star& input_items,
                               gr_vector_void_star&       output_items )
-    {
+    { 
+      /*static int work_iter = 0;
+      work_iter++;
+      for (int i = 0; i < noutput_items; i++) {
+	gr_complex *sample = &((gr_complex*)input_items[0])[0];
+      	printf("WORKINGON %d %f %f\n", work_iter, sample[i].real(), sample[i].imag());
+      }*/
+      static unsigned int master_counter = 0;
       for (double freq = d_low_freq; freq <= d_high_freq; freq += 1e6) {   
-        gr_complex *ch_samples = new gr_complex[noutput_items+100000];
+	//printf("Enterthedragon");
+        float scale_factor = d_sample_rate/1000000.0;
+        double on_channel_energy, snr;
+	snr = 1.0;
+	/* //Modified decoder//
+	gr_complex *ch_samples = new gr_complex[noutput_items+100000];
         gr_vector_void_star btch( 1 );
         btch[0] = ch_samples;
         double on_channel_energy, snr;
+	long ninputitems = history();
         int ch_count = channel_samples( freq, input_items, btch, on_channel_energy, history() );
-        bool brok; // = check_basic_rate_squelch(input_items);
-        bool leok = brok = check_snr( freq, on_channel_energy, snr, input_items );
 
+	//printf("# input to work: %ld # after downsampling: %d\n",ninputitems,ch_count);
+	//printf("Sampling rate: %f\n",d_sample_rate);	
+        float scale_factor = d_sample_rate/1000000.0;
+	//printf("scale_factor=%f",scale_factor);
+	bool brok; // = check_basic_rate_squelch(input_items);
+        bool leok = brok = check_snr( freq, on_channel_energy, snr, input_items );
+	*/ 
+	bool brok;
+	bool leok = brok = true;
         /* number of symbols available */
         if (brok || leok) {
           int sym_length = history();
           char *symbols = new char[sym_length];
           /* pointer to our starting place for sniff_ */
           char *symp = symbols;
-          gr_vector_const_void_star cbtch( 1 );
-          cbtch[0] = ch_samples;
-          int len = channel_symbols( cbtch, symbols, ch_count );
-          delete [] ch_samples;
+          /*gr_vector_const_void_star cbtch( 1 );
+          cbtch[0] = ch_samples;*/ //Modified decoder
+          //int len = channel_symbols( cbtch, symbols, ch_count );
+	  int len = channel_symbols( input_items,symbols,history() ); //Modified decoder
+	  //printf("Number of symbols:%d\n",len);
+          //delete [] ch_samples;
           
           if (brok) {
             int limit = ((len - SYMBOLS_PER_BASIC_RATE_SHORTENED_ACCESS_CODE) < SYMBOLS_PER_BASIC_RATE_SLOT) ? 
@@ -130,16 +153,82 @@ namespace gr {
             symp = symbols;
             int limit = ((len - SYMBOLS_PER_BASIC_RATE_SHORTENED_ACCESS_CODE) < SYMBOLS_PER_BASIC_RATE_SLOT) ? 
               (len - SYMBOLS_PER_BASIC_RATE_SHORTENED_ACCESS_CODE) : SYMBOLS_PER_BASIC_RATE_SLOT;
-
-            while (limit >= 0) {
+	    //printf("limit=%d",limit);
+            int step_counter = 0;
+	    while (limit >= 0) {
               int i = le_packet::sniff_aa(symp, limit, freq);
+	      //printf("i=%d\n",i);
               if (i >= 0) {
                 int step = i + SYMBOLS_PER_LOW_ENERGY_PREAMBLE_AA;
-				//printf("symp[%i], len-i = %i\n", i, len-i);
-                aa(&symp[i], len - i, freq, snr);
-                len   -= step;
+		unsigned packet_length = 0;
+		char *bd_filname;
+		float *bd_vals;
+		int packet_flag = 0;
+		//printf("symp[%i], len-i = %i\n", i, len-i);
+                //printf("#STARTPACKET:%d\n",i+step_counter);
+		aa(&symp[i], len - i, freq, snr,&packet_length,&bd_filname,&packet_flag,&bd_vals);
+		//printf("Filename=%s\n",bd_filname);
+#if 0	
+		if (packet_length > 0 && packet_flag == 1)
+		{
+			char cumul_count[50];
+			//snprintf(cumul_count,48,"_%u",master_counter);
+			snprintf(cumul_count,48,"%u",master_counter);
+			char filname_final[100];
+			//strcpy(filname_final,bd_filname);
+			//strcat(filname_final,cumul_count);
+			strcpy(filname_final,cumul_count);
+			
+			std::ofstream file (filname_final,std::ios::out|std::ios::binary);
+	
+			//int packet_size = (int)((77 + 10)*3.125);
+			int packet_size = (int)((packet_length+10)*scale_factor);
+			printf("Packet size is:%d\n",packet_size);
+			float *rawsamps = new float[((packet_size*8)+20)*2];
+			int start_point = (((int)((i+step_counter)*scale_factor) - 40) > 0) ? ((int)((i+step_counter)*scale_factor)-40) : 0;
+			printf("Ch_count:%d,start_point:%d\n",ch_count,start_point);
+			int r = 0;
+			for (int j = 0 ; (r< 2*((packet_size*8)+20)-1) && (j < ch_count-start_point); r+=2,j+=1)
+			{
+				rawsamps[r] = ch_samples[start_point+j].real();
+				rawsamps[r+1] = ch_samples[start_point+j].imag();
+			}
+			//float imagval[30+packet_length];
+			if (file.is_open())
+			{
+				//float realval = ch_samples[i+step_counter].real();
+				//float imagval = ch_samples[i+step_counter].imag();
+				float b = 0;
+				/*for (int t = 0; t<20000;++t)
+				{
+					file.write((char *)&b,sizeof(float));
+				}*/
+				file.write((char *)rawsamps,sizeof(float)*(r));
+				/*for (int t = 0; t<20000;++t)
+                                {
+                                        file.write((char *)&b,sizeof(float));
+                                }*/
+				file.write((char *)bd_vals,sizeof(float)*12);
+				//printf("Blah\n");
+				
+
+				//file.write((char *)&imagval,sizeof(float)*(30+packet_length)*8);
+			}
+			packet_flag = 0;
+			printf("Master_counter=%u\n",master_counter);
+			master_counter ++;
+			file.close();
+			delete [] rawsamps;
+			delete [] bd_filname;
+			delete [] bd_vals;
+		}
+#endif
+		//master_counter ++;
+                //printf("Start of packet:%d End of packet:%d\n",i,len-i);
+		len   -= step;
 				if(step >= sym_length) error_out("Bad step");
                 symp   = &symp[step];
+		step_counter += step;
                 limit -= step;
               }
               else {
@@ -148,11 +237,13 @@ namespace gr {
             }
           }
           delete [] symbols;
+//	  delete [] ch_samples;
         }
         else {
-          delete [] ch_samples;
+  //        delete [] ch_samples;
         }
       }
+      //printf("Cumulative count updated\n");
       d_cumulative_count += (int) d_samples_per_slot;
       
       /* 
@@ -162,6 +253,8 @@ namespace gr {
        * time slot of input items so that our next run starts one slot
        * later.
        */
+
+      //printf("# of output samples: %lf\n", d_samples_per_slot);
       return (int) d_samples_per_slot;
     }
 
@@ -173,7 +266,7 @@ namespace gr {
       uint32_t clkn = (int) (d_cumulative_count / d_samples_per_slot) & 0x7ffffff;
       classic_packet::sptr pkt = classic_packet::make(symbols, len, clkn, freq);
       uint32_t lap = pkt->get_LAP();
-
+	//printf("Blah\n");
       printf("time %6d, snr=%.1f, channel %2d, LAP %06x ", 
              clkn, snr, pkt->get_channel( ), lap);
 
@@ -203,16 +296,52 @@ namespace gr {
       }
     }
 
-    /* handle AA */
+    /* handle AA */ /*change return type to char - Nishant*/
     void
-    multi_sniffer_impl::aa(char *symbols, int len, double freq, double snr)
+    multi_sniffer_impl::aa(char *symbols, int len, double freq, double snr,unsigned* pdu_length,char **filname,int *flag,float **vals)
     {
       le_packet::sptr pkt = le_packet::make(symbols, len, freq);
       uint32_t clkn = (int) (d_cumulative_count / d_samples_per_slot) & 0x7ffffff;
-
+	//printf("samples_per_slot:%f\n",d_samples_per_slot);
       printf("time %6d, snr=%.1f, ", clkn, snr);
-      pkt->print( );
+      //pkt->print( );
 
+      if (pkt->get_index() == true && (pkt->get_PDU_type() == 0 || pkt->get_PDU_type() == 1 || pkt->get_PDU_type() == 2 || pkt->get_PDU_type() == 6))
+      {
+	      *filname = pkt->get_bd_string();
+	      *vals = pkt->get_bd_ints();
+	      //printf("File name:%s",filname);
+	      *pdu_length = pkt->get_pdu_length();
+	      //printf("Filename=%s\n",*filname);
+	      //if (pkt->contact_tracing())
+	      //{
+		//      printf("Contact Tracing: TRUE\n");
+          	if(pkt->le_crc_check())
+          	{
+			printf("CRC1\n");
+            		//*flag = 1;
+          	}
+          	else
+          	{
+            		printf("CRC0\n");
+          	}	
+	      //}
+	      //else
+	      //{
+	//	      printf("Contact Tracing: FALSE\n");
+	  //    }
+	      //if(!(strcmp(*filname,"6be991a778d2"))){
+	      //if(!(strcmp(*filname,"50185da28e83")) || !(strcmp(*filname,"6b3c1f38b5fe"))){
+	      //if(!(strcmp(*filname,"50c901232152")) || !(strcmp(*filname,"5e8ef98b2bb9")) || !(strcmp(*filname,"7ad438bc0540"))){
+	      //if(!(strcmp(*filname,"79ccbc2f77a2")) || !(strcmp(*filname,"59fce2b0639b"))){
+	      //if(!(strcmp(*filname,"5ac52b09ae39"))){
+	      //if(!(strcmp(*filname,"71129a59bb92"))){
+	      /*
+	      if(!(strcmp(*filname,"4f23444052c3"))){
+	      *flag = 1;
+	      }*/
+      }
+      pkt->print();
       if (pkt->header_present()) {
         uint32_t aa = pkt->get_AA( );
         if (!d_low_energy_piconets[aa]) {

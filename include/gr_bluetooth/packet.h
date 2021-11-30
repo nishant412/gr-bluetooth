@@ -284,7 +284,7 @@ namespace gr {
       int get_channel( ) { return d_channel; }
     };
 
-#define LE_MAX_PDU_OCTETS 39
+#define LE_MAX_PDU_OCTETS 40
 #define LE_MAX_OCTETS     (1+4+LE_MAX_PDU_OCTETS+3)
 #define LE_MAX_SYMBOLS    (8*LE_MAX_OCTETS)
 
@@ -322,6 +322,8 @@ namespace gr {
 
       static int sniff_aa(char *stream, int stream_length, double freq);
 
+      static uint8_t air_to_host8_flip(char *, int );
+
       /* decode the packet header */
       virtual bool decode_header() = 0;
        
@@ -340,7 +342,28 @@ namespace gr {
       /* return the low-energy packet's AA */
       virtual uint32_t get_AA() = 0;
 
+      /* get the channel index - Nishant */
+      virtual bool get_index() = 0;
+
+      /* return PDU Length - Nishant */
+      virtual unsigned get_pdu_length() = 0;
+
+      /* return BD Addr string - Nishant */
+      virtual char * get_bd_string() = 0;
+
+      /* return BD Addr ints - Nishant */
+      virtual float *get_bd_ints() = 0;
+
+      /* return true if contact tracing packet - Nishant */
+      virtual bool contact_tracing() = 0;
+      /*return PDU type*/
+      virtual uint8_t get_PDU_type() =0;
+
+      /*return true if packet passes CRC check - Nishant*/
+      virtual bool le_crc_check() = 0;
+
       virtual int get_channel( ) = 0;
+
     };
 
   } // namespace bluetooth

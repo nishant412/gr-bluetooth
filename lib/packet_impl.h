@@ -164,9 +164,11 @@ namespace gr {
       uint8_t  d_SN;
       uint8_t  d_MD;
       unsigned d_PDU_Length;
+      uint32_t d_crc;
 
       char    d_link_symbols[LE_MAX_SYMBOLS];
       uint8_t d_pdu[LE_MAX_PDU_OCTETS];
+      uint8_t d_pdu_full[LE_MAX_PDU_OCTETS+3];
 
     public:
       le_packet_impl(char *stream, int length, double freq=0.0);
@@ -189,8 +191,30 @@ namespace gr {
 
       /* return the low-energy packet's AA */
       uint32_t get_AA() { return d_AA; }
+      
+      /* get the channel index - Nishant */
+      bool get_index();
+
+      /* return PDU Length - Nishant */
+      unsigned get_pdu_length() { return d_PDU_Length;}
+      
+      /* return BD Addr string - Nishant */
+      char * get_bd_string();
+
+      /* return BD Addr ints - Nishant */
+      float *get_bd_ints();
+
+      /* check if contact tracing beacon - Nishant */
+      bool contact_tracing();
+
+      /* implementation of LE CRC computation - Nishant */
+      uint32_t le_crc_calc();
+      
+      /* check if calculated and packet CRC match - Nishant */
+      bool le_crc_check();
 
       int get_channel( ) { return d_channel; }
+      uint8_t get_PDU_type() { return d_PDU_Type;}
     };
 
   } // namespace bluetooth
