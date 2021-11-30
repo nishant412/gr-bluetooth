@@ -1,5 +1,5 @@
-##Modified gr-bluetooth for SparSDR single channel decode. 
-
+Modified gr-bluetooth for SparSDR single channel decode 
+=======================================================
 Should work for integer samples per symbol. Optimized to reduce memory and processor usage.
 
 CRC Check for BLE packets also added.
