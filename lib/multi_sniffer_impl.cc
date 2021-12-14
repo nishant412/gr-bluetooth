@@ -59,7 +59,8 @@ namespace gr {
                        gr::io_signature::make (0, 0, 0))
     {
       d_tun = tun;
-      set_symbol_history(SYMBOLS_FOR_BASIC_RATE_HISTORY);
+      //set_symbol_history(SYMBOLS_FOR_BASIC_RATE_HISTORY);
+      set_symbol_history(0);
 
       /* Tun interface */
       if (d_tun) {
@@ -92,8 +93,9 @@ namespace gr {
       	printf("WORKINGON %d %f %f\n", work_iter, sample[i].real(), sample[i].imag());
       }*/
       static unsigned int master_counter = 0;
-      for (double freq = d_low_freq; freq <= d_high_freq; freq += 1e6) {   
+      //for (double freq = d_low_freq; freq <= d_high_freq; freq += 1e6) {   
 	//printf("Enterthedragon");
+        double freq = d_center_freq;
         float scale_factor = d_sample_rate/1000000.0;
         double on_channel_energy, snr;
 	snr = 1.0;
@@ -118,6 +120,7 @@ namespace gr {
         if (brok || leok) {
           int sym_length = history();
           char *symbols = new char[sym_length];
+		//printf("char is %2d bytes \n",sizeof(char));
           /* pointer to our starting place for sniff_ */
           char *symp = symbols;
           /*gr_vector_const_void_star cbtch( 1 );
@@ -126,11 +129,15 @@ namespace gr {
 	  int len = channel_symbols( input_items,symbols,history() ); //Modified decoder
 	  //printf("Number of symbols:%d\n",len);
           //delete [] ch_samples;
-          
+          int temp = 0;
+	  /*for (temp=0;temp<sym_length;++temp){
+	  	printf("%d,",symp[temp]);
+	  }
+	  printf("\n");*/
           if (brok) {
             int limit = ((len - SYMBOLS_PER_BASIC_RATE_SHORTENED_ACCESS_CODE) < SYMBOLS_PER_BASIC_RATE_SLOT) ? 
               (len - SYMBOLS_PER_BASIC_RATE_SHORTENED_ACCESS_CODE) : SYMBOLS_PER_BASIC_RATE_SLOT;
-        
+       		//printf("Limit:%d\n",limit); 
             /* look for multiple packets in this slot */
             while (limit >= 0) {
               /* index to start of packet */
@@ -242,7 +249,7 @@ namespace gr {
         else {
   //        delete [] ch_samples;
         }
-      }
+      //}
       //printf("Cumulative count updated\n");
       d_cumulative_count += (int) d_samples_per_slot;
       

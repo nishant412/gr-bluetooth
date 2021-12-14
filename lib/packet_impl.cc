@@ -249,13 +249,16 @@ namespace gr {
       /* Looks for an AC in the stream */
       int count;
       int max_distance = 2; // maximum number of bit errors to tolerate in preamble + trailer
-
+	//printf("Hello Stream Length:%d\n",stream_length);
       for( count=0; count<stream_length; count++ ) {
         char * symbols = &stream[count];
+	//printf("%d,",symbols[0]);
         // start of sync word (includes LSB of sync word)
         uint8_t preamble = air_to_host8( &symbols[0], 5 );
+	//printf("Preamble: %#04x\n",preamble);
         // MSB of LAP and 6-bit barker in 7 symbols
         uint16_t barker = air_to_host16( &symbols[61], 7 );
+	//printf("Barker: %#04x\n",barker);
         if ((PREAMBLE_DISTANCE[preamble] + BARKER_DISTANCE[barker]) 
             <= max_distance) {
           uint32_t LAP = air_to_host32( &symbols[38], 24 );

@@ -190,7 +190,7 @@ int multi_block::mm_cr(const float *in, int ninput_items, float *out, int noutpu
 			int sps = (int)d_samples_per_symbol;
 			for(ctr=first_i;ctr<last_i+1;ctr++){
 				if(temp_ctr == sps){
-					out[oo] = temp_avg/sps;
+					out[oo] = temp_avg;
 					oo++;
 					temp_ctr = 0;
 					temp_avg = 0.0;
@@ -214,7 +214,7 @@ int multi_block::mm_cr(const float *in, int ninput_items, float *out, int noutpu
 	int sps = (int)d_samples_per_symbol;
 	for(ctr=first_i;ctr<last_i+1;ctr++){
 		if(temp_ctr == sps){
-			out[oo] = temp_avg/sps;
+			out[oo] = temp_avg;
 			oo++;
 			temp_ctr = 0;
 			temp_avg = 0.0;
@@ -222,7 +222,7 @@ int multi_block::mm_cr(const float *in, int ninput_items, float *out, int noutpu
 		temp_avg += in[ctr];
 		temp_ctr += 1;
 	}
-	out[oo] = temp_avg/sps;
+	out[oo] = temp_avg;
 	oo++;
 	return oo;
 }
@@ -251,13 +251,15 @@ int multi_block::mm_cr(const float *in, int ninput_items, float *out, int noutpu
 	int first_count=0;
 	int total_count=0;
       for (i = 0; i < noutput_items; i++) {
-	      //printf("%f,",in[i]);
+		//printf("%f,",in[i]);
 	      if ((in[i] > 0.0) || (in[i] < 0.0)){
 	      count += 1;
 	      if(first_count==0)
 		      first_count=i;
 	      }
-	      out[i] = (in[i] < 0) ? 0 : 1;
+	      //printf("%f\n",in[i]);
+	      out[i] = (in[i] < 0.0) ? 0 : 1;
+	      //printf("%d,",out[i]);
       }
       //printf("\n");
       //printf("Count=%d\n",count);
