@@ -198,8 +198,14 @@ int multi_block::mm_cr(const float *in, int ninput_items, float *out, int noutpu
 				temp_avg += in[ctr];
 				temp_ctr += 1;
 			}
-			out[oo] = temp_avg;
-			oo++;
+			if (temp_ctr == 1){
+				out[oo-1] += temp_avg;
+			}
+			else {
+				out[oo] = temp_avg;
+				oo++;
+			}
+			
 			first_i=ii;
 		}
 		//printf("%f,",in[ii]);

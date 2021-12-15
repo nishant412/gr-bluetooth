@@ -59,8 +59,8 @@ namespace gr {
                        gr::io_signature::make (0, 0, 0))
     {
       d_tun = tun;
-      //set_symbol_history(SYMBOLS_FOR_BASIC_RATE_HISTORY);
-      set_symbol_history(0);
+      set_symbol_history(625);
+      //set_symbol_history(0);
 
       /* Tun interface */
       if (d_tun) {
@@ -100,18 +100,6 @@ namespace gr {
         double on_channel_energy, snr;
 	snr = 1.0;
 	/* //Modified decoder//
-	gr_complex *ch_samples = new gr_complex[noutput_items+100000];
-        gr_vector_void_star btch( 1 );
-        btch[0] = ch_samples;
-        double on_channel_energy, snr;
-	long ninputitems = history();
-        int ch_count = channel_samples( freq, input_items, btch, on_channel_energy, history() );
-
-	//printf("# input to work: %ld # after downsampling: %d\n",ninputitems,ch_count);
-	//printf("Sampling rate: %f\n",d_sample_rate);	
-        float scale_factor = d_sample_rate/1000000.0;
-	//printf("scale_factor=%f",scale_factor);
-	bool brok; // = check_basic_rate_squelch(input_items);
         bool leok = brok = check_snr( freq, on_channel_energy, snr, input_items );
 	*/ 
 	bool brok;
@@ -129,14 +117,11 @@ namespace gr {
 	  int len = channel_symbols( input_items,symbols,history() ); //Modified decoder
 	  //printf("Number of symbols:%d\n",len);
           //delete [] ch_samples;
-          int temp = 0;
-	  /*for (temp=0;temp<sym_length;++temp){
-	  	printf("%d,",symp[temp]);
-	  }
-	  printf("\n");*/
+         
           if (brok) {
-            int limit = ((len - SYMBOLS_PER_BASIC_RATE_SHORTENED_ACCESS_CODE) < SYMBOLS_PER_BASIC_RATE_SLOT) ? 
-              (len - SYMBOLS_PER_BASIC_RATE_SHORTENED_ACCESS_CODE) : SYMBOLS_PER_BASIC_RATE_SLOT;
+            /*int limit = ((len - SYMBOLS_PER_BASIC_RATE_SHORTENED_ACCESS_CODE) < SYMBOLS_PER_BASIC_RATE_SLOT) ? 
+              (len - SYMBOLS_PER_BASIC_RATE_SHORTENED_ACCESS_CODE) : SYMBOLS_PER_BASIC_RATE_SLOT;*/
+		  int limit = len;
        		//printf("Limit:%d\n",limit); 
             /* look for multiple packets in this slot */
             while (limit >= 0) {
@@ -176,59 +161,6 @@ namespace gr {
 		aa(&symp[i], len - i, freq, snr,&packet_length,&bd_filname,&packet_flag,&bd_vals);
 		//printf("Filename=%s\n",bd_filname);
 #if 0	
-		if (packet_length > 0 && packet_flag == 1)
-		{
-			char cumul_count[50];
-			//snprintf(cumul_count,48,"_%u",master_counter);
-			snprintf(cumul_count,48,"%u",master_counter);
-			char filname_final[100];
-			//strcpy(filname_final,bd_filname);
-			//strcat(filname_final,cumul_count);
-			strcpy(filname_final,cumul_count);
-			
-			std::ofstream file (filname_final,std::ios::out|std::ios::binary);
-	
-			//int packet_size = (int)((77 + 10)*3.125);
-			int packet_size = (int)((packet_length+10)*scale_factor);
-			printf("Packet size is:%d\n",packet_size);
-			float *rawsamps = new float[((packet_size*8)+20)*2];
-			int start_point = (((int)((i+step_counter)*scale_factor) - 40) > 0) ? ((int)((i+step_counter)*scale_factor)-40) : 0;
-			printf("Ch_count:%d,start_point:%d\n",ch_count,start_point);
-			int r = 0;
-			for (int j = 0 ; (r< 2*((packet_size*8)+20)-1) && (j < ch_count-start_point); r+=2,j+=1)
-			{
-				rawsamps[r] = ch_samples[start_point+j].real();
-				rawsamps[r+1] = ch_samples[start_point+j].imag();
-			}
-			//float imagval[30+packet_length];
-			if (file.is_open())
-			{
-				//float realval = ch_samples[i+step_counter].real();
-				//float imagval = ch_samples[i+step_counter].imag();
-				float b = 0;
-				/*for (int t = 0; t<20000;++t)
-				{
-					file.write((char *)&b,sizeof(float));
-				}*/
-				file.write((char *)rawsamps,sizeof(float)*(r));
-				/*for (int t = 0; t<20000;++t)
-                                {
-                                        file.write((char *)&b,sizeof(float));
-                                }*/
-				file.write((char *)bd_vals,sizeof(float)*12);
-				//printf("Blah\n");
-				
-
-				//file.write((char *)&imagval,sizeof(float)*(30+packet_length)*8);
-			}
-			packet_flag = 0;
-			printf("Master_counter=%u\n",master_counter);
-			master_counter ++;
-			file.close();
-			delete [] rawsamps;
-			delete [] bd_filname;
-			delete [] bd_vals;
-		}
 #endif
 		//master_counter ++;
                 //printf("Start of packet:%d End of packet:%d\n",i,len-i);
