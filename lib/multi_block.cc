@@ -199,7 +199,10 @@ int multi_block::mm_cr(const float *in, int ninput_items, float *out, int noutpu
 				temp_ctr += 1;
 			}
 			if (temp_ctr == 1){
-				out[oo-1] += temp_avg;
+				if (oo > 0) {
+					out[oo-1] += temp_avg;
+			
+				}
 			}
 			else {
 				out[oo] = temp_avg;
@@ -240,11 +243,31 @@ int multi_block::mm_cr(const float *in, int ninput_items, float *out, int noutpu
       int i;
       gr_complex product;
 	//printf("*************************************************************\n");
-      for (i = 1; i < noutput_items; i++) {
+#if 1
+     for (i = 1; i < noutput_items; i++) {
         gr_complex product = in[i] * conj (in[i-1]);
         out[i] = d_demod_gain * gr::fast_atan2f(imag(product), real(product));
 	//printf("%f;",out[i]);
       }
+#else
+      float cur_val,last_val;
+      int flag = 0;
+      for (i=1; i < noutput_items; i++) {
+	      if (flag){
+		      cur_val = gr::fast_atan2f(imag(in[i]),real(in[i]));
+		      out[i] = d_demod_gain*(cur_val - last_val);
+		      last_val = cur_val;
+	      }
+	      else{
+		      cur_val = gr::fast_atan2f(imag(in[i]),real(in[i]));
+		      last_val = gr::fast_atan2f(imag(in[i-1]),real(in[i-1]));
+		      out[i] = d_demod_gain*(cur_val - last_val);
+		      last_val = cur_val;
+
+	      }
+	      printf("%f,",out[i]);
+      }
+#endif
 	//printf("\n*************************************************************\n");
     }
 
