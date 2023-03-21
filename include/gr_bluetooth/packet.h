@@ -203,6 +203,7 @@ namespace gr {
 
       /* search a symbol stream to find a packet, return index */
       static int sniff_ac(char *stream, int stream_length);
+      static int sniff_ac2(float *stream, int stream_length,int sps);
 
       /* Error correction coding for Access Code */
       static uint8_t *lfsr(uint8_t *data, int length, int k, uint8_t *g);

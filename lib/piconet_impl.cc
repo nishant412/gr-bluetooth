@@ -467,7 +467,7 @@ namespace gr {
           /* if not: check CRCs if UAPs match */
           if (!d_got_first_packet || UAP == d_clock6_candidates[count])
             retval = packet->crc_check(clock);
-
+	//printf("\nRetval %d\n",retval);
           switch(retval) {
 
           case -1: /* UAP mismatch */

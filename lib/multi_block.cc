@@ -91,7 +91,8 @@ namespace gr {
 
       /* mm_cr variables */
       d_gain_mu = 0.175;
-      d_mu = 0.32;
+      //d_mu = 0.32;
+      d_mu = 0.0;
       d_omega_relative_limit = 0.005;
       d_omega = channel_samples_per_symbol;
       d_gain_omega = .25 * d_gain_mu * d_gain_mu;
@@ -128,18 +129,20 @@ namespace gr {
     }
 
     /* M&M clock recovery, adapted from gr_clock_recovery_mm_ff */
-#if 0
+#if 1
     int 
     multi_block::mm_cr(const float *in, int ninput_items, float *out, int noutput_items)
     {
       unsigned int ii = 0; /* input index */
       int          oo = 0; /* output index */
+      printf("Number of taps:%d\n",d_interp->ntaps());
       unsigned int ni = ninput_items - d_interp->ntaps(); /* max input */
       float        mm_val;
 
       while ((oo < noutput_items) && (ii < ni)) {
         // produce output sample
 	//printf("d_mu %3.3f\n", d_mu);
+	printf("%f, ",in[ii]);
         out[oo]       = d_interp->interpolate( &in[ii], d_mu );
         mm_val        = slice(d_last_sample) * out[oo] - slice(out[oo]) * d_last_sample;
         d_last_sample = out[oo];
@@ -157,8 +160,7 @@ namespace gr {
       /* return number of output items produced */
       return oo;
     }
-#endif
-#if 1
+#else
 int multi_block::mm_cr(const float *in, int ninput_items, float *out, int noutput_items)
 {
 	unsigned int ii = 1; /* input index */
@@ -170,10 +172,19 @@ int multi_block::mm_cr(const float *in, int ninput_items, float *out, int noutpu
 	int first_i = 0;
 	int last_i = 0;
 	int cur_count =0;
+	int first_flag = 0;
 	while ((oo < noutput_items) && (ii < ninput_items)) {
 		if ( ((in[ii] > 0.0) && (in[ii-1] <= 0.0)) || ((in[ii] < 0.0) && (in[ii-1] >= 0.0)) ) {
+			/*if(first_flag){
 			last_i = ii-1;
 			//first_item = 0;
+			flag = 1;
+			}
+			else{
+			first_i = ii;
+			first_flag = 1;
+			}*/
+			last_i = ii-1;
 			flag = 1;
 		}
 		if (flag){
@@ -235,7 +246,50 @@ int multi_block::mm_cr(const float *in, int ninput_items, float *out, int noutpu
 	oo++;
 	return oo;
 }
-#endif				
+#endif
+#if 0
+int multi_block::mm_cr(const float *in, int ninput_items, float *out, int noutput_items)
+{
+	int oo = 0; //Output index
+	int decode_ctr = 0;
+	float decode_symbol = 0.0;
+	bool extra_sample = false;
+	bool first_sample = false;
+	int sps = (int)d_samples_per_symbol;
+	for(int i=0; i<ninput_items-1; ++i){
+		printf("IVAL:%d\n",i);
+		if (first_sample == false){
+			if ((in[i] <= 0.0 && in[i+1] > 0.0) || (in[i] < 0.0 && in[i+i] >= 0.0)){
+				first_sample = true;
+			}
+			continue;
+		}
+		if(extra_sample){
+			extra_sample = false;
+		}
+		else{
+			decode_symbol = decode_symbol + in[i];
+		}
+		decode_ctr += 1;
+		if((in[i] <= 0.0 && in[i+1] > 0.0) || (in[i] < 0.0 && in[i+1] >= 0.0) || (decode_ctr == sps)){
+			if(decode_ctr == sps){
+				if (oo < noutput_items){
+					out[oo] = decode_symbol;
+					oo++;
+				}
+				decode_symbol = 0;
+				decode_ctr = 0;
+			}
+			else if(decode_ctr > sps/2){
+				extra_sample = true;
+			}
+			else{
+				decode_symbol = 0;
+			}
+		}
+	}
+}
+#endif
     /* fm demodulation, taken from gr_quadrature_demod_cf */
     void 
     multi_block::demod(const gr_complex *in, float *out, int noutput_items)
@@ -243,7 +297,7 @@ int multi_block::mm_cr(const float *in, int ninput_items, float *out, int noutpu
       int i;
       gr_complex product;
       float pi_2 = 2*M_PI;
-	//printf("*************************************************************\n");
+	printf("\n*************************************************************\nPHASEVAL, \n");
 #if 0
      for (i = 1; i < noutput_items; i++) {
         gr_complex product = in[i] * conj (in[i-1]);
@@ -291,30 +345,31 @@ int multi_block::mm_cr(const float *in, int ninput_items, float *out, int noutpu
 		      flag = 1;
 
 	      }
-	      //printf("%f,",out[i]);
+	      printf(" %f, ",out[i]);
       }
 #endif
-	//printf("\n*************************************************************\n");
+	printf("\n*************************************************************\n");
     }
 
     /* binary slicer, similar to gr_binary_slicer_fb */
     void 
     multi_block::slicer(const float *in, char *out, int noutput_items)
     {
-      int i;
+      int i,j;
 	int count=0;
 	int first_count=0;
 	int total_count=0;
-      for (i = 0; i < noutput_items; i++) {
+	int sps = (int)d_samples_per_symbol;
+      for (i = 0,j=0; i < noutput_items && j < noutput_items; i++,j+=sps) {
 		//printf("%f,",in[i]);
-	      if ((in[i] > 0.0) || (in[i] < 0.0)){
+	      if ((in[j] > 0.0) || (in[j] < 0.0)){
 	      count += 1;
 	      if(first_count==0)
 		      first_count=i;
 	      }
 	      //printf("%f\n",in[i]);
-	      out[i] = (in[i] < 0.0) ? 0 : 1;
-	      //printf("%d,",out[i]);
+	      out[i] = (in[j] < 0.0) ? 0 : 1;
+	      //printf("%d, ",out[i]);
       }
       //printf("\n");
       //printf("Count=%d\n",count);
@@ -447,7 +502,8 @@ int multi_block::mm_cr(const float *in, int ninput_items, float *out, int noutpu
     void 
     multi_block::set_symbol_history(int num_symbols)
     {
-      set_history((int) (history() + (num_symbols * d_samples_per_symbol)));
+      //set_history((int) (history() + (num_symbols * d_samples_per_symbol)));
+      set_history((int)(num_symbols * d_samples_per_symbol));
     }
 
     /* set available channels based on d_center_freq and d_sample_rate */

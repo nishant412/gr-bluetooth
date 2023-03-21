@@ -242,6 +242,7 @@ namespace gr {
       d_have_payload   = false;
       d_payload_length = 0;
     }
+#if 1 
 
     /* search a symbol stream to find a classic_packet, return index */
     int classic_packet::sniff_ac(char *stream, int stream_length)
@@ -269,7 +270,47 @@ namespace gr {
       }
       return -1;
     }
+#endif
+#if 1
+    int classic_packet::sniff_ac2(float *stream, int stream_length,int sps)
+    {
+      /* Looks for an AC in the stream */
+      int count,sfo;
+      int max_distance = 0; // maximum number of bit errors to tolerate in preamble + trailer
+	//printf("Hello Stream Length:%d\n",stream_length);
+      int num_symbols = (stream_length - stream_length%sps)/sps;
+      //printf("Stream length:%d\n",stream_length);
+      char symbol_vals[num_symbols];
 
+      for(sfo = 0; sfo < sps; sfo++){
+      		//printf("Entering loop\n");
+	      for(count = 0; count<num_symbols;count++){
+		      //printf("Count:%d\n",sfo + count*sps);
+		      symbol_vals[count] = stream[sfo + count*sps]>0.0?1:0;
+	      }
+	      for( count=0; count<num_symbols-SYMBOLS_PER_BASIC_RATE_ACCESS_CODE; count++ ) {
+		      //printf("Blah\n");
+		      //printf("Count:%d\n",count);
+		      char * symbols = &symbol_vals[count];
+		      //printf("%d,",symbols[0]);
+		      //// start of sync word (includes LSB of sync word)
+		      uint8_t preamble = air_to_host8( &symbols[0], 5 );
+		      //printf("Preamble: %#04x\n",preamble);
+		      // MSB of LAP and 6-bit barker in 7 symbols
+        	      uint16_t barker = air_to_host16( &symbols[61], 7 );
+		      //printf("Barker: %#04x\n",barker);
+        	      if ((PREAMBLE_DISTANCE[preamble] + BARKER_DISTANCE[barker]) <= max_distance) {
+          			uint32_t LAP = air_to_host32( &symbols[38], 24 );
+				printf("New LAP:%x\n",LAP);
+          			if (check_ac( symbols, LAP )) {
+            				return (count*sps + sfo);
+          			}
+        	      }
+      	      }
+      }
+      return -1;
+    }
+#endif
     /*
      * Our virtual destructor.
      */
@@ -505,7 +546,7 @@ namespace gr {
           //printf("POSSIBLE PACKET, LAP = %06x with %d errors\n", LAP, biterrors);
           free(grdata);
           //return false;
-          return true;
+          return false;
 	}
 
       free(grdata);

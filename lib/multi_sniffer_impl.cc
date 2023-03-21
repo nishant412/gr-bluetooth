@@ -59,7 +59,7 @@ namespace gr {
                        gr::io_signature::make (0, 0, 0))
     {
       d_tun = tun;
-      set_symbol_history(312);
+      set_symbol_history(625);
       //set_symbol_history(0);
 
       /* Tun interface */
@@ -86,63 +86,78 @@ namespace gr {
                               gr_vector_const_void_star& input_items,
                               gr_vector_void_star&       output_items )
     { 
-      /*static int work_iter = 0;
-      work_iter++;
-      for (int i = 0; i < noutput_items; i++) {
-	gr_complex *sample = &((gr_complex*)input_items[0])[0];
-      	printf("WORKINGON %d %f %f\n", work_iter, sample[i].real(), sample[i].imag());
-      }*/
-      static unsigned int master_counter = 0;
-      //for (double freq = d_low_freq; freq <= d_high_freq; freq += 1e6) {   
-	//printf("Enterthedragon");
-        double freq = d_center_freq;
-        float scale_factor = d_sample_rate/1000000.0;
-        double on_channel_energy, snr;
-	snr = 1.0;
-	/* //Modified decoder//
-        bool leok = brok = check_snr( freq, on_channel_energy, snr, input_items );
-	*/ 
-	bool brok;
-	bool leok = brok = true;
-        /* number of symbols available */
-        if (brok || leok) {
-          int sym_length = history();
-          char *symbols = new char[sym_length];
-		//printf("char is %2d bytes \n",sizeof(char));
-          /* pointer to our starting place for sniff_ */
-          char *symp = symbols;
-          /*gr_vector_const_void_star cbtch( 1 );
-          cbtch[0] = ch_samples;*/ //Modified decoder
-          //int len = channel_symbols( cbtch, symbols, ch_count );
-	  int len = channel_symbols( input_items,symbols,history() ); //Modified decoder
-	  //printf("Number of symbols:%d\n",len);
-          //delete [] ch_samples;
-         
-          if (brok) {
-           // int limit = ((len - SYMBOLS_PER_BASIC_RATE_SHORTENED_ACCESS_CODE) < SYMBOLS_PER_BASIC_RATE_SLOT) ? (len - SYMBOLS_PER_BASIC_RATE_SHORTENED_ACCESS_CODE) : SYMBOLS_PER_BASIC_RATE_SLOT;
-		  int limit = len;
-       		//printf("Limit:%d\n",limit); 
-            /* look for multiple packets in this slot */
-            while (limit > 0) {
-              /* index to start of packet */
-              int i = classic_packet::sniff_ac(symp, limit);
-              if (i >= 0) {
-                int step = i + SYMBOLS_PER_BASIC_RATE_SHORTENED_ACCESS_CODE;
-                ac(&symp[i], limit - i, freq, snr);
-                //len   -= step;
-				if(step >= sym_length) error_out("Bad step");
-                //symp   = &symp[step];
-                symp += step;
-		limit -= step;
-		printf("Limit=%d,Len=%d,i=%d\n",limit,len,i);
-              } 
-              else {
-                break;
-              }
-            }
-          }
-
-          if (leok) {
+	    static unsigned int master_counter = 0;
+	    master_counter++;
+	    printf("\nMASTER_COUNTER %d\n",master_counter);
+	    float scale_factor = d_sample_rate/1000000.0;
+	    double freq = d_center_freq;
+	    double snr = 1.0;
+	    bool leok = false; 
+	    bool brok = true;
+	    /* number of symbols available */
+	    if (brok || leok) {
+		    int sym_length = history();
+		    float demod_out[noutput_items-1];  
+		    char *symbols = new char[noutput_items-1];
+		    float mmcr_out[noutput_items-1];
+		    int symp = 0;
+		    gr_complex *ch_samps = (gr_complex *) input_items[0];
+		    //printf("Start decoding\n");
+		    demod(ch_samps, demod_out, noutput_items-1);
+		    printf("Demod done %d\n",noutput_items-1);
+		    int sps = (int)d_samples_per_symbol;
+		    printf("sps: %d\n",sps);
+		    if (brok) {
+			    int limit = noutput_items-1;
+			    int len = limit;
+			    int total_step = 0;
+			    /* look for multiple packets in this slot */
+			    while (limit > 0) {
+				    /* index to start of packet */
+				    int i = classic_packet::sniff_ac2(&demod_out[symp], 
+						    limit,(int)d_samples_per_symbol);
+				    //int offset = i%sps;
+				    //printf("offset:%d\n",offset);
+				    /*int mmout = mm_cr(&demod_out,limit-i,mmcr_out,limit-i);
+				    for (int i=0;i<mmout;++i){
+			 	    	symbols[i] = mmcr_out[i] > 0.0 ? 1 : 0;
+				    }*/
+				    //printf("AC found\n");
+				    if (i >= 0) {
+					    int step = i + SYMBOLS_PER_BASIC_RATE_SHORTENED_ACCESS_CODE*sps;
+					    //int step = i + sps;
+					    printf("Packet detected, %d\n",i+symp);
+#if 1
+					    slicer(&demod_out[symp+i],symbols,limit-i);
+#else
+					    int mmout = mm_cr(&demod_out[i+symp],limit-i,mmcr_out,limit-i);
+					    printf("\n");
+					    for (int t=0;t<mmout;++t){
+						printf("%d,",symbols[t]);
+					    	symbols[t] = mmcr_out[t] > 0.0 ? 1 : 0;
+					    }
+					    printf("\n");
+#endif
+					    ac(symbols, limit-i, freq, snr);
+					    //ac(symbols, mmout, freq, snr);
+					    //len   -= step;
+					    //if(step >= sym_length) error_out("Bad step");
+					    //symp   = &symp[step];
+					    symp += step;
+					    limit -= step;
+					    //printf("Limit=%d,Len=%d,i=%d\n",limit,len,i);
+				    } 
+				    else {
+					    break;
+				    }
+			    }
+		    }
+	 /*}
+	  else{
+		  master_counter++;
+	  }*/
+	
+          /*if (leok) {
             symp = symbols;
             int limit = ((len - SYMBOLS_PER_BASIC_RATE_SHORTENED_ACCESS_CODE) < SYMBOLS_PER_BASIC_RATE_SLOT) ? 
               (len - SYMBOLS_PER_BASIC_RATE_SHORTENED_ACCESS_CODE) : SYMBOLS_PER_BASIC_RATE_SLOT;
@@ -175,7 +190,7 @@ namespace gr {
                 break;
               }
             }
-          }
+          }*/
           delete [] symbols;
 //	  delete [] ch_samples;
         }
@@ -211,15 +226,18 @@ namespace gr {
              clkn, snr, pkt->get_channel( ), lap);
 
       if (pkt->header_present()) {
+	      //printf("\nHeader present\n");
         if (!d_basic_rate_piconets[lap]) {
           d_basic_rate_piconets[lap] = basic_rate_piconet::make(lap);
         }
         basic_rate_piconet::sptr pn = d_basic_rate_piconets[lap];
 
         if (pn->have_clk6() && pn->have_UAP()) {
+		//printf("\nHave UAP\n");
           decode(pkt, pn, true);
         } 
         else {
+		//printf("\nDont have UAP\n");
           discover(pkt, pn);
         }
 
@@ -356,7 +374,7 @@ namespace gr {
     void multi_sniffer_impl::discover(classic_packet::sptr pkt,
                                       basic_rate_piconet::sptr pn)
     {
-      printf("working on UAP/CLK1-6\n");
+      //printf("working on UAP/CLK1-6\n");
 
       /* store packet for decoding after discovery is complete */
       pn->enqueue(pkt);
