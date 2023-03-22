@@ -88,7 +88,9 @@ namespace gr {
     { 
 	    static unsigned int master_counter = 0;
 	    master_counter++;
+#if PRINT_MSG
 	    printf("\nMASTER_COUNTER %d\n",master_counter);
+#endif
 	    float scale_factor = d_sample_rate/1000000.0;
 	    double freq = d_center_freq;
 	    double snr = 1.0;
@@ -104,9 +106,15 @@ namespace gr {
 		    gr_complex *ch_samps = (gr_complex *) input_items[0];
 		    //printf("Start decoding\n");
 		    demod(ch_samps, demod_out, noutput_items-1);
+#if PRINT_MSG
 		    printf("Demod done %d\n",noutput_items-1);
+#endif
 		    int sps = (int)d_samples_per_symbol;
+#if PRINT_MSG
 		    printf("sps: %d\n",sps);
+#endif
+			sniff_ac_nishant(&demod_out[symp],noutput_items-1,sps,freq,snr);
+#if 0			
 		    if (brok) {
 			    int limit = noutput_items-1;
 			    int len = limit;
@@ -126,7 +134,9 @@ namespace gr {
 				    if (i >= 0) {
 					    int step = i + SYMBOLS_PER_BASIC_RATE_SHORTENED_ACCESS_CODE*sps;
 					    //int step = i + sps;
+#if PRINT_MSG
 					    printf("Packet detected, %d\n",i+symp);
+#endif
 #if 1
 					    slicer(&demod_out[symp+i],symbols,limit-i);
 #else
@@ -176,8 +186,6 @@ namespace gr {
                 //printf("#STARTPACKET:%d\n",i+step_counter);
 		aa(&symp[i], len - i, freq, snr,&packet_length,&bd_filname,&packet_flag,&bd_vals);
 		//printf("Filename=%s\n",bd_filname);
-#if 0	
-#endif
 		//master_counter ++;
                 //printf("Start of packet:%d End of packet:%d\n",i,len-i);
 		len   -= step;
@@ -191,6 +199,7 @@ namespace gr {
               }
             }
           }*/
+#endif
           delete [] symbols;
 //	  delete [] ch_samples;
         }
@@ -212,7 +221,52 @@ namespace gr {
       //printf("# of output samples: %lf\n", d_samples_per_slot);
       return (int) d_samples_per_slot;
     }
-
+int
+multi_sniffer_impl::sniff_ac_nishant(float *stream, int stream_length,int sps, double freq,double snr)
+    {
+      /* Looks for an AC in the stream */
+      int count,sfo;
+      int max_distance = 0; // maximum number of bit errors to tolerate in preamble + trailer
+	//printf("Hello Stream Length:%d\n",stream_length);
+      int num_symbols = (stream_length - stream_length%sps)/sps;
+      //printf("Stream length:%d\n",stream_length);
+      char symbol_vals[num_symbols];
+	bool packet_flag = false;
+      for(sfo = 0; sfo < sps; sfo++){
+      		//printf("Entering loop\n");
+	      for(count = 0; count<num_symbols;count++){
+		      //printf("Count:%d\n",sfo + count*sps);
+		      symbol_vals[count] = stream[sfo + count*sps]>0.0?1:0;
+	      }
+	      count = 0;
+	      while( count<num_symbols-SYMBOLS_PER_BASIC_RATE_SHORTENED_ACCESS_CODE ) {
+		      //printf("Blah\n");
+		      //printf("Count:%d\n",count);
+		      char * symbols = &symbol_vals[count];
+		      //printf("%d,",symbols[0]);
+		      //// start of sync word (includes LSB of sync word)
+		      uint8_t preamble = classic_packet::air_to_host8( &symbols[0], 5 );
+		      //printf("Preamble: %#04x\n",preamble);
+		      // MSB of LAP and 6-bit barker in 7 symbols
+        	      uint16_t barker = classic_packet::air_to_host16( &symbols[61], 7 );
+		      //printf("Barker: %#04x\n",barker);
+        	      if ((classic_packet::PREAMBLE_DISTANCE[preamble] + classic_packet::BARKER_DISTANCE[barker]) <= max_distance) {
+          			uint32_t LAP = classic_packet::air_to_host32( &symbols[38], 24 );
+				//printf("New LAP:%x\n",LAP);
+          			if (classic_packet::check_ac( symbols, LAP )) {
+            				packet_flag = true;
+          			}
+        	      }
+		      if (packet_flag){
+		      		packet_flag = false;
+				ac(symbols, num_symbols-count, freq, snr);
+				count += SYMBOLS_PER_BASIC_RATE_SHORTENED_ACCESS_CODE;
+		      }
+		      count++;
+      	      }
+      }
+      return -1;
+    }
     /* handle AC */
     void 
     multi_sniffer_impl::ac(char *symbols, int len, double freq, double snr)

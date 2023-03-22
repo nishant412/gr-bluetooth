@@ -301,7 +301,7 @@ namespace gr {
 		      //printf("Barker: %#04x\n",barker);
         	      if ((PREAMBLE_DISTANCE[preamble] + BARKER_DISTANCE[barker]) <= max_distance) {
           			uint32_t LAP = air_to_host32( &symbols[38], 24 );
-				printf("New LAP:%x\n",LAP);
+				//printf("New LAP:%x\n",LAP);
           			if (check_ac( symbols, LAP )) {
             				return (count*sps + sfo);
           			}

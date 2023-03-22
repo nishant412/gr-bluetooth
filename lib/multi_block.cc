@@ -297,7 +297,7 @@ int multi_block::mm_cr(const float *in, int ninput_items, float *out, int noutpu
       int i;
       gr_complex product;
       float pi_2 = 2*M_PI;
-	printf("\n*************************************************************\nPHASEVAL, \n");
+	//printf("\n*************************************************************\nPHASEVAL, \n");
 #if 0
      for (i = 1; i < noutput_items; i++) {
         gr_complex product = in[i] * conj (in[i-1]);
@@ -345,10 +345,10 @@ int multi_block::mm_cr(const float *in, int ninput_items, float *out, int noutpu
 		      flag = 1;
 
 	      }
-	      printf(" %f, ",out[i]);
+	      //printf(" %f, ",out[i]);
       }
 #endif
-	printf("\n*************************************************************\n");
+	//printf("\n*************************************************************\n");
     }
 
     /* binary slicer, similar to gr_binary_slicer_fb */
@@ -368,7 +368,7 @@ int multi_block::mm_cr(const float *in, int ninput_items, float *out, int noutpu
 		      first_count=i;
 	      }
 	      //printf("%f\n",in[i]);
-	      out[i] = (in[j] < 0.0) ? 0 : 1;
+	      out[i] = (in[j-1]+in[j]+in[j+1] < 0.0) ? 0 : 1;
 	      //printf("%d, ",out[i]);
       }
       //printf("\n");
